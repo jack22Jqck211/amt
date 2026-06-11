@@ -1,95 +1,58 @@
 import { http } from "@ampt/sdk";
+import https from "https";
+import httpNative from "http";
 
-const blockedKeys = [
-  "host", "connection", "keep-alive", "proxy-authenticate", 
-  "proxy-authorization", "te", "trailer", "transfer-encoding", 
-  "upgrade", "forwarded", "x-forwarded-host", "x-forwarded-proto", 
-  "x-forwarded-port"
-];
-
-// استفاده از هسته Node.js در لایه HTTP پلتفرم Ampt
+// ساخت یک سرور پروکسی سازگار با امپت همراه با صفحه اصلی
 http.node.use((req, res) => {
-  const u = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-
-  // ۱. صفحه اصلی شیک و مدرن
-  if (u.pathname === "/" && !req.headers['x-host']) {
-    const html = `
-    <!DOCTYPE html>
-    <html lang="fa" dir="rtl">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Reverse Proxy Service</title>
-        <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;500;800&display=swap" rel="stylesheet">
-        <style>
-            body { margin: 0; padding: 0; font-family: 'Vazirmatn', sans-serif; background: radial-gradient(circle at center, #1a1a2e 0%, #0f0f1b 100%); color: #ffffff; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-            .container { text-align: center; padding: 40px; background: rgba(255, 255, 255, 0.03); border-radius: 24px; backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3); max-width: 500px; width: 90%; animation: fadeIn 1s ease-out; }
-            .icon { font-size: 64px; margin-bottom: 20px; background: linear-gradient(45deg, #00ffcc, #0077ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-            h1 { margin: 0 0 10px 0; font-size: 2.5rem; font-weight: 800; letter-spacing: -1px; }
-            p { color: #8b9bb4; font-size: 1.1rem; line-height: 1.6; margin-bottom: 30px; font-weight: 300; }
-            .status { display: inline-flex; align-items: center; gap: 8px; background: rgba(0, 255, 204, 0.1); color: #00ffcc; padding: 8px 16px; border-radius: 50px; font-size: 0.9rem; font-weight: 500; border: 1px solid rgba(0, 255, 204, 0.2); }
-            .pulse { width: 8px; height: 8px; background-color: #00ffcc; border-radius: 50%; box-shadow: 0 0 10px #00ffcc; animation: pulse-animation 1.5s infinite; }
-            @keyframes pulse-animation { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 255, 204, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(0, 255, 204, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 255, 204, 0); } }
-            @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="icon">⚡</div>
-            <h1>پروکسی سرور فعال است</h1>
-            <p>سرویس انتقال ترافیک با موفقیت روی پلتفرم Ampt مستقر شد و آماده پردازش درخواست‌های شماست.</p>
-            <div class="status"><div class="pulse"></div><span>سیستم کاملاً پایدار است (Ampt)</span></div>
-        </div>
-    </body>
-    </html>`;
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=UTF-8' });
-    return res.end(html);
+  
+  // ۱. اگر کاربر آدرس را مستقیم در مرورگر باز کرد، این صفحه اصلی را نشان بده
+  if (req.url === '/' && !req.headers['x-target-url']) {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    return res.end(`
+      <!DOCTYPE html>
+      <html lang="fa" dir="rtl">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>وضعیت سرور پروکسی</title>
+          <style>
+              body { font-family: sans-serif; background-color: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+              .card { background-color: #1e293b; padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); text-align: center; border: 1px solid #334155; }
+              .status { color: #10b981; font-weight: bold; font-size: 1.2rem; margin-top: 1rem; }
+              .time { color: #94a3b8; font-size: 0.85rem; margin-top: 1.5rem; }
+          </style>
+      </head>
+      <body>
+          <div class="card">
+              <h2>🚀 پروکسی سرور Ampt با موفقیت فعال شد!</h2>
+              <p>کدهای جدید بدون خطا بارگذاری شده‌اند و سرور آماده به کار است.</p>
+              <div class="status">● وضعیت: آماده اتصال در ویتوری</div>
+              <div class="time">به‌روزرسانی: ژوئن ۲۰۲۶</div>
+          </div>
+      </body>
+      </html>
+    `);
   }
 
-  // ۲. بخش پروکسی
-  const t = req.headers['x-host'];
-  if (!t) {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    return res.end('OK');
-  }
-
-  const isSecure = !t.includes(":") || t.includes(":443") || /^s\d+\./.test(t);
-  const base = t.startsWith("http") ? t : (isSecure ? "https://" : "http://") + t;
-  const targetUrl = new URL(u.pathname + u.search, base);
-
-  const h = {};
-  let ip = null;
-
-  Object.keys(req.headers).forEach((k) => {
-    const kk = k.toLowerCase();
-    if (blockedKeys.includes(kk) || kk === "x-host") return;
-    if (kk === "x-real-ip") { ip = req.headers[k]; return; }
-    if (kk === "x-forwarded-for") { if (!ip) ip = req.headers[k]; return; }
-    h[kk] = req.headers[k];
-  });
-
-  if (ip) h["x-forwarded-for"] = ip;
-
-  const transport = targetUrl.protocol === 'https:' ? require('https') : require('http');
-
-  const proxyReq = transport.request(targetUrl, {
+  // ۲. بخش پروکسی برای درخواست‌های ویتوری
+  const targetUrl = req.headers['x-target-url'] || 'https://google.com'; 
+  
+  const options = {
     method: req.method,
-    headers: h,
-  }, (proxyRes) => {
-    const oh = {};
-    Object.keys(proxyRes.headers).forEach((k) => {
-      if (k.toLowerCase() !== "transfer-encoding") {
-        oh[k] = proxyRes.headers[k];
-      }
-    });
+    headers: { ...req.headers },
+  };
+  
+  delete options.headers['host'];
+  delete options.headers['x-ampt-proxy'];
 
-    res.writeHead(proxyRes.statusCode, oh);
+  const proxyReq = (targetUrl.startsWith('https') ? https : httpNative).request(targetUrl, options, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers);
     proxyRes.pipe(res);
   });
 
   proxyReq.on('error', (err) => {
-    res.writeHead(502, { 'Content-Type': 'text/plain' });
-    res.end(`Proxy Error: ${err.message}`);
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Proxy failed', details: err.message }));
   });
 
   req.pipe(proxyReq);

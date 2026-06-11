@@ -1,0 +1,8 @@
+{
+  "name": "ampt-proxy",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@ampt/sdk": "latest"
+  }
+}
